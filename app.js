@@ -19,67 +19,28 @@ var app = express();
 const log4js = require('log4js');
 const appName = require('./package').name;
 const bodyParser = require('body-parser');
-const https = require('https');
 const keyprotect = require('./routes/keyprotect');
-
-
 const logger = log4js.getLogger(appName);
 logger.level ='trace';
 
-
-
-var port = process.env.PORT || 3000;
-
-/**
- * Support json parsing
- */
-app.use(bodyParser.urlencoded({
-    extended: true,
-  }));
-  app.use(bodyParser.json({ limit: '50mb' }));
-
-
+app.use(bodyParser.urlencoded({ extended: true }));
+app.use(bodyParser.json({ limit: '50mb' }));
 
 app.get('/',(req,res) => {
-
-    res.send({
-        "message" : "Yay.. I'm running!  But I am an API so there is nothing to see here!!"
-    })
+    res.send({"message" : "Yay.. I'm running!  But I am an API so there is nothing to see here!!"});
 });
 
-
 app.get('/health',(req,res) => {
-
-    res.send({
-        "status" : "UP"
-    })
+    res.send({ "status" : "UP" });
 });
 
 app.get('/key/:keyid', keyprotect.retrieveKey);
-app.post('/wrap/:keyid', keyprotect.wrap);
+app.post('/encrypt/:keyid', keyprotect.encrypt);
+app.post('/decrypt/:keyid', keyprotect.decrypt);
 
-
-
-
-
-
-
-app.post('/decrypt',(req,res) => {
-
-// This is the use case where sensitive data was wrapped by a root key.  
-// In this case the DEK is the sensitive data itself
-
-    res.send({
-        "status" : "UP"
-    })
-});
-
-
+var port = process.env.PORT || 3000;
 
 app.listen(port, function(){
 //    console.log("Listening on http://localhost:" + port);
     logger.info("Listening on http://localhost:" + port);
 });
-
-
-
