@@ -61,8 +61,6 @@ keyprotect.retrieveKey = async (req, res, next) => {
 
 };
 
-
-
 /**
  * Wrap a Data Encryption Key (DEK) with a Customer Root Key (CRK)
  * 
@@ -70,6 +68,13 @@ keyprotect.retrieveKey = async (req, res, next) => {
  * It will wrap the DEK and return the wrapped key to the caller
  * 
  * Method: POST
+ * 
+ * To control which field contains the sensitive data, set a header in the http request:
+ *   'sensitive-data': '<your-field-name>'
+ * 
+ * this will wrap the data in the '<your-field-name>' field in the body of the request.  This field MUST be at the root
+ * level of the object.  If no 'sensitive-data' header is found this function will encrypt the first field
+ * in the JSON object in the body of the request.
  * 
  * NOTE: This method requires the following environment variables
  *       KEY_PROTECT_INSTANCE - the GUID of your Key Protect instance
@@ -86,20 +91,33 @@ keyprotect.encrypt = async (req, res, next) => {
     logger.debug("Key ID: " + keyId);
     logger.debug("Request body");
     logger.debug(payload);
+    logger.debug('the sensitive data to be encrypted is ' + payload[req.headers['sensitive-data']]);
+    logger.debug('the name of the first element in the payload is ' + Object.keys(payload)[0])
+
+    let sensitiveData = "";
+
+    if(req.headers['sensitive-data']) {
+        sensitiveData = payload[req.headers['sensitive-data']];
+    }else{
+        sensitiveData = payload[Object.keys(payload)[0]];
+    }
 
     // since this is an encrypt, the data needs to be base64 encoded
-    let kpResponse = await performAction(keyId, 'wrap', Buffer.from(payload.ssn).toString('base64'));
+    let kpResponse = await performAction(keyId, 'wrap', Buffer.from(sensitiveData).toString('base64'));
 
     // grab the encrpyted data and update the payload
-    payload.ssn = kpResponse.ciphertext;
+    if(req.headers['sensitive-data']) {
+        payload[req.headers['sensitive-data']] = kpResponse.ciphertext;
+    }else{
+        payload[Object.keys(payload)[0]] = kpResponse.ciphertext;
+    }
+
     logger.debug('Exiting keyprotect.encrypt.....');
     res.writeHead(200, {'Content-Type': 'application/json'});
     res.write(JSON.stringify(payload));
     res.end();
 
-
 };
-
 
 /**
  * Unrap a Data Encryption Key (DEK) with a Customer Root Key (CRK)
@@ -125,19 +143,31 @@ keyprotect.decrypt = async (req, res, next) => {
     logger.debug("Request body");
     logger.debug(payload);
 
+    let sensitiveData = "";
+
+    if(req.headers['sensitive-data']) {
+        sensitiveData = payload[req.headers['sensitive-data']];
+    }else{
+        sensitiveData = payload[Object.keys(payload)[0]];
+    }
+
+    logger.debug('In decrypt, the sensitive data is ' + sensitiveData);
     // Since this is a decrypt the data is already base64 encoded
-    let kpResponse = await performAction(keyId, 'unwrap', payload.ssn);
+    let kpResponse = await performAction(keyId, 'unwrap', sensitiveData);
 
     // grab the decrpyted data and update the payload
-    payload.ssn = Buffer.from(kpResponse.plaintext, 'base64').toString('ascii');
+    if(req.headers['sensitive-data']) {
+        payload[req.headers['sensitive-data']] = Buffer.from(kpResponse.plaintext, 'base64').toString('ascii');
+    }else{
+        payload[Object.keys(payload)[0]] = Buffer.from(kpResponse.plaintext, 'base64').toString('ascii');
+    }
+
     logger.debug('Exiting keyprotect.decrypt.....');
     res.writeHead(200, {'Content-Type': 'application/json'});
     res.write(JSON.stringify(payload));
     res.end();
 
-
 }; // end of function decrypt
-
 
 /**
  * internal function to call the Key Protect API and retrieve a key
@@ -191,14 +221,12 @@ async function getKey(keyId) {
                 resolve(body)                
             })
 
-
         });
 
         req.end();
     });
 
 }; // end of function getKey
-
 
 /**
  * internal function to call the Key Protect API and perform an action on a key
@@ -276,14 +304,12 @@ async function performAction(keyId, action, data) {
                 resolve(body)                
             })
 
-
         });
         req.write(JSON.stringify(postData));
         req.end();
     });
 
 }; //end of function performAction
-
 
 /**
  * Internal function to exchange an IBM Cloud API Key for an IAM oauth token for authentication to 
@@ -300,7 +326,6 @@ function getAuthToken(apikey) {
 
     logger.debug('entering getAuthToken....');
 
-    
     const formData = querystring.stringify({
         "grant_type": "urn:ibm:params:oauth:grant-type:apikey",
         "apikey": apikey
